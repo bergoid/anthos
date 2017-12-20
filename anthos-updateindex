@@ -1,0 +1,30 @@
+#!/bin/bash
+
+tsvFile=source/pageindex/tsvdata.txt
+pagesFile=tagged-pages.txt
+
+while read line; do
+    grep ":notimestamp:" "source${line}header.inc" > /dev/null 2>&1
+    if [ "$?" -ne "0" ]; then
+        echo -ne :doc:\`${line}index\`'\t:timestamp:`'$(date -r source${line}index.rst "+%Y-%m-%d %H:%M:%S")'`\t'
+        firstTag=true
+        while read tagname; do
+            tagname_fs="$(echo "$tagname" | tr ' ' '_')"
+            if ! "$firstTag"; then
+                echo -n ':greytext:`|` '
+            fi
+            firstTag=false
+            echo -n ":doc:\`/tags/$tagname_fs/index\` "
+        done < <(grep source${line}index "$pagesFile" | cut -d: -f2- | cut -f1- --output-delimiter=$'\n' | sed 's/^ *//g' | sort -u)
+        echo
+    fi
+done < <(find . -name index.rst | sed "s/^\.\/source//g" | sed "s/index.rst$//g" | sort | sed "1 d") > "$tsvFile"
+
+sort -r -t $'\t' -k 2 "$tsvFile" -o "$tsvFile"
+
+mainPage=source/index.rst
+echo ".. include:: toctree.inc" > "$mainPage"
+echo >> "$mainPage"
+head -n 5 source/pageindex/tsvdata.txt | cut -f 1 >> "$mainPage"
+
+

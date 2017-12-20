@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Create an 'index.rst' file in every folder that
+# doesn't have one yet.
+while read folder; do
+    title="$(basename "$folder")"
+    echo $title > $folder/index.rst
+    echo $title | tr [:print:] '=' >> $folder/index.rst
+    echo >> $folder/index.rst
+done < <(comm -23 <(find source \( -path "source/tags" -o -path "source/_*" \) -prune -o \( -type d -print \) | sort -u) <(find source -path "source/tags" -prune -o \( -name 'index.rst' -printf '%h\n' \) | sort))

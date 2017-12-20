@@ -1,0 +1,50 @@
+#!/bin/bash
+
+. rabot-common
+if [ "$?" -ne "0" ]; then
+  echo "$0: Error while sourcing rabot-common" >&2
+  exit 1
+fi
+
+checkForHelp $1
+minNumArgs 2 $#
+
+: << DOCSTRING
+Usage: $(basename "$0") BUILDDIR RELEASEDIR
+
+'$(basename "$0")' builds a release directory of an anthos project.
+DOCSTRING
+
+buildDir="$1"
+releaseDir="$2"
+
+if [ ! -d "$1" ]; then
+    exitWith 1 "Error: the build dir '$1' doesn't exist"
+fi
+
+mkdir -p "$releaseDir"
+exitOnError 1 "Could not create release directory '$releaseDir'"
+
+[ -n "$releaseDir" ] && rm -rf "$releaseDir"/*
+exitOnError 1 "Could not delete the contents of '$releaseDir'"
+
+cp -r "$buildDir"/* "$releaseDir"
+exitOnError 1 "Could not copy from '$buildDir' to '$releaseDir'"
+
+rm "$releaseDir"/html/searchindex.js
+exitOnError 1 "Could not remove '$releaseDir/searchindex.js'"
+
+rm "$releaseDir"/html/objects.inv
+exitOnError 1 "Could not remove '$releaseDir/objects.inv'"
+
+rm -rf "$releaseDir"/html/_sources
+exitOnError 1 "Could not remove '$releaseDir/_sources'"
+
+rm -rf "$releaseDir"/doctrees
+exitOnError 1 "Could not remove '$releaseDir/doctrees'"
+
+#echo "$buildDir"/tidy.txt
+#anthos-tidy-html "$releaseDir" > "$buildDir"/tidy.txt 2>&1
+#exitOnError 1 "'anthos-tidy-html $releaseDir' returned an error."
+
+echo "Release successful: '$releaseDir'"

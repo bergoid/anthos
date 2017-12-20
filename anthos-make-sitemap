@@ -1,0 +1,42 @@
+#!/bin/bash
+
+sitemapFile="source/sitemap/index.rst"
+
+fullScriptPath="$(pwd)"
+#fullScriptPath="$(readlink -f "$0")"
+#fullDirPath="$(dirname "$fullScriptPath")"
+scriptName="$(basename "$0")"
+
+# If called without arguments:
+# write start of sitemap
+# set current dir to root
+if [ -z "$1" ]; then
+
+    echo Sitemap > "$sitemapFile"
+    echo ======= >> "$sitemapFile"
+    echo >> "$sitemapFile"
+    mytest="hihi"
+    echo "- :doc:\`$(anthos-printsitename.py)</index>\`" >> "$sitemapFile"
+
+    currentDir=source
+
+# If called with an argument:
+# set current dir to arg
+else
+    currentDir="$1"
+fi
+
+# iterate over the entries found in the toctree of the current dir
+# and call this script for every entry found.
+while read line; do
+    nextDir="$currentDir$line"
+    numWords="$(tr / ' ' <<<"$nextDir" | wc -w)"
+    for ((i=0; i < numWords ; i++))
+    do
+      echo -n "    " >> "$sitemapFile"
+    done
+    echo $(sed 's/^source/- :doc:`/g' <<<"$nextDir")'/index`' >> "$sitemapFile"
+    if [ -f "$nextDir/toctree.inc" ]; then
+        "$scriptName" "$nextDir"
+    fi
+done < <(cat "$currentDir/toctree.inc" | sed '/^\s*$/d' | sed '/^\s*:[a-zA-Z1-9]*:$/d' | sed '/^.. toctree::$/d' | sed 's/^\s*.//g' | sed 's/\/index//g')

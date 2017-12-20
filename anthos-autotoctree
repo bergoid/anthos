@@ -1,0 +1,81 @@
+#!/bin/bash
+
+sourceDir=source
+sitemapFile="source/sitemap/index.rst"
+
+# If called without arguments:
+# 1. make a list of all folders that have subfolders containing an 'index.rst' file
+# 2. iterate over that list and call this script again with the list item as argument.
+# 3. create sitemap, and set tags & root toctree to hidden
+if [ -z "$1" ]; then
+
+    fullScriptPath="$(pwd)"
+#    fullDirPath="$(dirname "$fullScriptPath")"
+    scriptName="$(basename "$0")"
+
+#    fullScriptPath="$(readlink -f "$0")"
+#    fullDirPath="$(dirname "$fullScriptPath")"
+#    scriptName="$(basename "$fullScriptPath")"
+    pagesFile="pages.txt"
+#    cd $fullDirPath
+
+    echo Current dir : $(pwd)
+
+    # Find all index.rst files and store their paths in 'pages.txt':
+    find source/ -name 'index.rst' -printf '%h\n' > $pagesFile
+
+    # Of every 'index.rst' found in 'source':
+    # chop off the filename and keep the full path to its parent dir (printf '...'),
+    # then chop off the parent dir from the full path (sed '...').
+    # Sort this list and de-duplicate (sort)
+    # and throw away the first item, the root dir 'source' (tail).
+    adtdirs="$(cat $pagesFile | sed 's,/*[^/]\+/*$,,' | sort -u | tail -n +2)"
+
+    for arg in $adtdirs
+    do
+        $scriptName $arg
+    done
+
+    # Add ':hidden:' to tags toctree
+    sed -i 's/\(^\s\s*:titlesonly:$\)/\1\n    :hidden:/g' source/tags/toctree.inc
+
+    # Add ':hidden:' to root toctree
+    sed -i 's/\(^\s\s*:titlesonly:$\)/\1\n    :hidden:/g' source/toctree.inc
+
+# If called with a folder name as argument:
+#
+# 1. check if :mantoctree: is set in the header.inc file
+# 2. if it is set, and if toctree.inc already exists, don't update toctree.inc
+# 3. otherwise, update/create toctree.inc
+#
+# create a toctree for that folder one level deep
+else
+    cd "$1"
+    createTOCTree=true
+
+    # check if :mantoctree: is set in the header.inc file
+    grep \:mantoctree\: header.inc  > /dev/null 2>&1
+
+    # if :mantoctree: is set, check if toctree.inc exists
+    if [ "$?" = "0" ]; then
+        if [ -f "toctree.inc" ]; then
+            createTOCTree=false
+        else
+            echo "WARNING: $(pwd) : :mantoctree: is set in header.inc, but toctree.inc doesn't exist. Auto-generating toctree anyway." >&2
+        fi
+    fi
+
+    # create toctree.inc
+    if $createTOCTree; then
+        echo .. toctree:: > toctree.inc
+        echo "    :titlesonly:" >> toctree.inc
+        echo >> toctree.inc
+        find . -maxdepth 2 -name 'index.rst' -printf '    %h\n' | sort | tail -n +2 | sed -e 's/$/\/index/' >> toctree.inc
+    fi
+
+    # Make sure toctree.inc is included in index.rst
+    grep "^\s*\.\.\sinclude::\stoctree.inc\s*$" index.rst > /dev/null 2>&1
+    if [ "$?" -ne "0" ]; then
+        echo .. include:: toctree.inc >> index.rst
+    fi
+fi
