@@ -1,0 +1,388 @@
+#!/bin/bash
+
+. rabot-utils
+if [ "$?" -ne "0" ]; then
+  echo "$0: Error while sourcing rabot-utils" >&2
+  exit 1
+fi
+
+function showHelp
+{
+cat << DOCSTRING
+Usage: $(basename "$0")
+DOCSTRING
+}
+
+checkForHelp $1
+
+################################################################################
+#                                                                              #
+#                                  autoPages                                   #
+#                                                                              #
+################################################################################
+function autoPages
+{
+    echo autoPages
+
+    # Create an 'index.rst' file in every folder that
+    # doesn't have one yet.
+    while read folder; do
+        title="$(basename "$folder")"
+        echo $title > $folder/index.rst
+        echo $title | tr [:print:] '=' >> $folder/index.rst
+        echo >> $folder/index.rst
+    done < <(comm -23 <(find source \( -path "source/tags" -o -path "source/_*" \) -prune -o \( -type d -print \) | sort -u) <(find source -path "source/tags" -prune -o \( -name 'index.rst' -printf '%h\n' \) | sort))
+}
+
+
+################################################################################
+#                                                                              #
+#                                 updateTags                                   #
+#                                                                              #
+################################################################################
+function updateTags
+{
+    echo updatePages
+
+    local sourceDir=source
+    local pagesFile=tagged-pages.txt
+    local tagsFile=tags.txt
+    local tagsDir=$sourceDir/tags
+    local tsvSingleTag=data.tsv
+    local tsvAllTags=source/tags/data.tsv
+
+    # Create a file listing all pages having tags, one page per line. Example:
+    # path_to_page: tag1<tab>tag2
+    grep -r --include=header.inc \:tags\: | grep -v "\.\.\ \+\:tags\:" | cut -d: -f 1,4 | sed 's/header.inc/index/g' | tr '|' $'\t' > $pagesFile
+
+    # Create a file listing all tags, one tagname per line. Example:
+    # tagname<tab>path_to_page1<tab>path_to_page2
+    while read tagname; do
+        echo -ne $tagname'\t'
+        grep -w "$tagname" $pagesFile | cut -d: -f1 | tr $'\n' $'\t' | head -c -1
+        echo
+    done < <(cut -d: -f2 $pagesFile | cut -f1- --output-delimiter=$'\n' | sed 's/^ *//g' | sort -u) > $tagsFile
+
+    # Create a .tsv file with data for the tags table
+    while read tagname; do
+        tagname_fs="$(echo $tagname | tr ' ' '_')"
+        echo -e ':doc:`'/tags/$tagname_fs/index'`\t:numpages:`'$(grep -wc "$tagname" "$pagesFile")'`'
+    done < <(cut -f1 $tagsFile) > $tsvAllTags
+
+    # Read $tagsFile and create source/tags/tag1/index.rst, source/tags/tag2/index.rst etc ...
+    #
+
+    # Delete all tags subdirectories
+    find $tagsDir -mindepth 1 -type d | xargs rm -rf
+
+    # Create subdir for every tagname and create an index.rst file in it
+    while read tagname; do
+        tagname_fs="$(echo $tagname | tr ' ' '_')"
+        tagdir="$tagsDir/$tagname_fs"
+        mkdir -p "$tagdir"
+        echo "$tagname" > "$tagdir/index.rst"
+        echo "$tagname" | tr [:print:] '=' >> "$tagdir/index.rst"
+        echo >> "$tagdir/index.rst"
+        echo ".. role:: timestamp" >> "$tagdir/index.rst"
+        echo ".. role:: greytext" >> "$tagdir/index.rst"
+        echo >> "$tagdir/index.rst"
+        echo "List of pages having the tag \'$tagname\':" >> "$tagdir/index.rst"
+        echo >> "$tagdir/index.rst"
+        echo  .. csv-table:: >> "$tagdir/index.rst"
+        echo " :widths: 70,70,40"  >> "$tagdir/index.rst"
+        echo " :class: pagetable"  >> "$tagdir/index.rst"
+        echo " :delim: tab" >> "$tagdir/index.rst"
+        echo " :file: $tsvSingleTag" >> "$tagdir/index.rst"
+        echo >> "$tagdir/index.rst"
+
+        # Iterate over all pages having tag '$tagname' and add a row for every page in tsvdata.txt
+        tsvFile="$tagdir/$tsvSingleTag"
+
+        echo -n > "$tsvFile"
+        while read page; do
+            echo -ne :doc:\`$(echo $page | sed "s/^$sourceDir//g")\`'\t:timestamp:`'$(date -r $page.rst "+%Y-%m-%d %H:%M:%S")'`\t' >> $tsvFile
+            firstTag=true
+            while read othertagname; do
+                if [ "$tagname" != "$othertagname" ]; then
+                    othertagname_fs="$(echo $othertagname | tr ' ' '_')"
+                    if ! "$firstTag"; then
+                        echo -n ':greytext:`|` ' >> "$tsvFile"
+                    fi
+                    firstTag=false
+                    echo -n ":doc:\`/tags/$othertagname_fs/index\` " >> "$tsvFile"
+                fi
+            done < <(grep $page $pagesFile | cut -d: -f2- | cut -f1- --output-delimiter=$'\n' | sed 's/^ *//g' | sort -u)
+            echo >> "$tsvFile"
+        # TODO: pass $tagname through some grep escape filter
+        done < <(grep -w "^$tagname" "$tagsFile" | cut -f2- --output-delimiter=$'\n')
+
+        # Sort the TSV data by date, newest first
+        sort -r -t $'\t' -k 2 "$tsvFile" -o "$tsvFile"
+
+        # Create header.inc
+        echo ":notimestamp:" > "$tagdir/header.inc"
+    done < <(cut -f1 "$tagsFile")
+}
+
+
+################################################################################
+#                                                                              #
+#                                autoTocTree                                   #
+#                                                                              #
+################################################################################
+function autoTocTree
+{
+    echo autoTocTree
+
+    local sourceDir=source
+    local sitemapFile="source/sitemap/index.rst"
+
+    # If called without arguments:
+    # 1. make a list of all folders that have subfolders containing an 'index.rst' file
+    # 2. iterate over that list and call this script again with the list item as argument.
+    # 3. create sitemap, and set tags & root toctree to hidden
+    if [ -z "$1" ]; then
+
+        local fullScriptPath="$(pwd)"
+        local pagesFile="pages.txt"
+
+        echo Current dir : $(pwd)
+
+        # Find all index.rst files and store their paths in 'pages.txt':
+        find source/ -name 'index.rst' -printf '%h\n' > $pagesFile
+
+        # Of every 'index.rst' found in 'source':
+        # chop off the filename and keep the full path to its parent dir (printf '...'),
+        # then chop off the parent dir from the full path (sed '...').
+        # Sort this list and de-duplicate (sort)
+        # and throw away the first item, the root dir 'source' (tail).
+        local adtdirs="$(cat $pagesFile | sed 's,/*[^/]\+/*$,,' | sort -u | tail -n +2)"
+
+        for arg in $adtdirs
+        do
+            autoTocTree $arg
+        done
+
+        # Add ':hidden:' to tags toctree
+        sed -i 's/\(^\s\s*:titlesonly:$\)/\1\n    :hidden:/g' source/tags/toctree.inc
+
+        # Add ':hidden:' to root toctree
+        sed -i 's/\(^\s\s*:titlesonly:$\)/\1\n    :hidden:/g' source/toctree.inc
+
+    # If called with a folder name as argument:
+    #
+    # 1. check if :mantoctree: is set in the header.inc file
+    # 2. if it is set, and if toctree.inc already exists, don't update toctree.inc
+    # 3. otherwise, update/create toctree.inc
+    #
+    # create a toctree for that folder one level deep
+    else
+        pushd "$1"
+        local createTOCTree=true
+
+        # check if :mantoctree: is set in the header.inc file
+        grep \:mantoctree\: header.inc  > /dev/null 2>&1
+
+        # if :mantoctree: is set, check if toctree.inc exists
+        if [ "$?" = "0" ]; then
+            if [ -f "toctree.inc" ]; then
+                createTOCTree=false
+            else
+                echo "WARNING: $(pwd) : :mantoctree: is set in header.inc, but toctree.inc doesn't exist. Auto-generating toctree anyway." >&2
+            fi
+        fi
+
+        # create toctree.inc
+        if $createTOCTree; then
+            echo .. toctree:: > toctree.inc
+            echo "    :titlesonly:" >> toctree.inc
+            echo >> toctree.inc
+            find . -maxdepth 2 -name 'index.rst' -printf '    %h\n' | sort | tail -n +2 | sed -e 's/$/\/index/' >> toctree.inc
+        fi
+
+        # Make sure toctree.inc is included in index.rst
+        grep "^\s*\.\.\sinclude::\stoctree.inc\s*$" index.rst > /dev/null 2>&1
+        if [ "$?" -ne "0" ]; then
+            echo .. include:: toctree.inc >> index.rst
+        fi
+
+        popd
+    fi
+}
+
+
+################################################################################
+#                                                                              #
+#                                updateMetadata                                #
+#                                                                              #
+################################################################################
+function updateMetadata
+{
+    echo  updateMetadata
+
+    local sourceDir=source
+
+    # Ensure presence of 'header.inc' for every page
+    ################################################
+
+        # Find all directories containing an 'index.rst' file
+        docDirs="$(find "$sourceDir"/ -name 'index.rst' -printf '%h\n')"
+
+        # Loop over this list of directories
+        for currentDir in $docDirs
+        do
+
+            # Create 'header.inc', if non-existent
+            if [ ! -f "$currentDir/header.inc" ];
+            then
+    #            echo ".. :tags: onetag|anothertag" >  "$currentDir/header.inc"
+                touch "$currentDir/header.inc"
+            fi
+
+        done
+
+
+    # Locate ':browse:' statements and ensure presence of ':browse_root:' for every page in subtree
+    ###############################################################################################
+
+        # for every browsable tree found, determine browse_root
+        while read browseRootDir; do
+
+            browse_root="$(echo $browseRootDir | sed "s/^source\///g")"
+
+            # for every header.inc found in the tree:
+            while read headerFile; do
+
+                # Check if ':browse_root:' statement already present
+                grepOutput="$(grep -n "^\:browse_root\:" "$headerFile")"
+
+                # if present: check if value of :browse_root: is still correct
+                if [ "$?" -eq "0" ]; then
+                    # obtain current value
+                    browse_root_current="$(echo $grepOutput | cut -d: -f 4- | sed "s/^[ ]*//")"
+
+                    # if correct: leave file unchanged
+                    # if not correct : obtain line number, and update statement
+                    if [ "$browse_root" != "$browse_root_current" ]; then
+                        browse_root_lineno="$(echo "$grepOutput" | cut -d: -f 1)"
+                        sed -i "${browse_root_lineno} c :browse_root: $browse_root" $headerFile
+                    fi
+
+                # if not present: append a ':browse_root:' statement to the end of the file
+                else
+
+                    echo ":browse_root: $browse_root" >> $headerFile
+                fi
+
+            done < <(find "$browseRootDir" -name header.inc)
+
+        done < <(grep -lr "^\:browse\:" $sourceDir | xargs -I{} dirname "{}")
+}
+
+
+################################################################################
+#                                                                              #
+#                                  updateIndex                                 #
+#                                                                              #
+################################################################################
+function updateIndex
+{
+    local tsvFile=source/pageindex/tsvdata.txt
+    local pagesFile=tagged-pages.txt
+
+    while read line; do
+        grep ":notimestamp:" "source${line}header.inc" > /dev/null 2>&1
+        if [ "$?" -ne "0" ]; then
+            echo -ne :doc:\`${line}index\`'\t:timestamp:`'$(date -r source${line}index.rst "+%Y-%m-%d %H:%M:%S")'`\t'
+            firstTag=true
+            while read tagname; do
+                tagname_fs="$(echo "$tagname" | tr ' ' '_')"
+                if ! "$firstTag"; then
+                    echo -n ':greytext:`|` '
+                fi
+                firstTag=false
+                echo -n ":doc:\`/tags/$tagname_fs/index\` "
+            done < <(grep source${line}index "$pagesFile" | cut -d: -f2- | cut -f1- --output-delimiter=$'\n' | sed 's/^ *//g' | sort -u)
+            echo
+        fi
+    done < <(find . -name index.rst | sed "s/^\.\/source//g" | sed "s/index.rst$//g" | sort | sed "1 d") > "$tsvFile"
+
+    sort -r -t $'\t' -k 2 "$tsvFile" -o "$tsvFile"
+
+    local mainPage=source/index.rst
+    echo ".. include:: toctree.inc" > "$mainPage"
+    echo >> "$mainPage"
+    head -n 5 source/pageindex/tsvdata.txt | cut -f 1 >> "$mainPage"
+}
+
+
+################################################################################
+#                                                                              #
+#                                  makeSitemap                                 #
+#                                                                              #
+################################################################################
+function makeSitemap
+{
+    local sitemapFile="source/sitemap/index.rst"
+
+    local fullScriptPath="$(pwd)"
+
+    local currentDir=
+
+    # If called without arguments:
+    # write start of sitemap
+    # set current dir to root
+    if [ -z "$1" ]; then
+
+        echo Sitemap > "$sitemapFile"
+        echo ======= >> "$sitemapFile"
+        echo >> "$sitemapFile"
+        echo "- :doc:\`$(anthos-printsitename.py)</index>\`" >> "$sitemapFile"
+
+        currentDir=source
+
+    # If called with an argument:
+    # set current dir to arg
+    else
+        currentDir="$1"
+    fi
+
+    # iterate over the entries found in the toctree of the current dir
+    # and call this script for every entry found.
+    while read line; do
+        local nextDir="$currentDir$line"
+        local numWords="$(tr / ' ' <<<"$nextDir" | wc -w)"
+        for ((i=0; i < numWords ; i++))
+        do
+          echo -n "    " >> "$sitemapFile"
+        done
+        echo $(sed 's/^source/- :doc:`/g' <<<"$nextDir")'/index`' >> "$sitemapFile"
+        if [ -f "$nextDir/toctree.inc" ]; then
+            makeSitemap "$nextDir"
+        fi
+    done < <(cat "$currentDir/toctree.inc" | sed '/^\s*$/d' | sed '/^\s*:[a-zA-Z1-9]*:$/d' | sed '/^.. toctree::$/d' | sed 's/^\s*.//g' | sed 's/\/index//g')
+}
+
+
+
+################################################################################
+#                                                                              #
+#                                  buildHtml                                   #
+#                                                                              #
+################################################################################
+function buildHtml
+{
+    autoPages
+    updateTags
+    autoTocTree
+    updateMetadata
+    updateIndex
+    makeSitemap
+
+    local sourceDir=${1:-$PWD}
+    local buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
+    mkdir -p "$buildDir"
+    sphinx-build -b html -d $buildDir/doctrees "$sourceDir/source" "$buildDir/html"
+}
+
+buildHtml
