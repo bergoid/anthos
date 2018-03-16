@@ -1,19 +1,22 @@
 #!/bin/bash
 
-. rabot-common
+. rabot-utils
 if [ "$?" -ne "0" ]; then
-  echo "$0: Error while sourcing rabot-common" >&2
+  echo "$0: Error while sourcing rabot-utils" >&2
   exit 1
 fi
 
-checkForHelp $1
-minNumArgs 2 $#
-
-: << DOCSTRING
+function showHelp
+{
+cat << DOCSTRING
 Usage: $(basename "$0") BUILDDIR RELEASEDIR
 
 '$(basename "$0")' builds a release directory of an anthos project.
 DOCSTRING
+}
+
+checkForHelp $1
+minNumArgs 2 $#
 
 buildDir="$1"
 releaseDir="$2"

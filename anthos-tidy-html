@@ -1,19 +1,22 @@
 #!/bin/bash
 
-. rabot-common
+. rabot-utils
 if [ "$?" -ne "0" ]; then
-  echo "$0: Error while sourcing rabot-common" >&2
+  echo "$0: Error while sourcing rabot-utils" >&2
   exit 1
 fi
 
-checkForHelp $1
-minNumArgs 1 $#
-
-: << DOCSTRING
+function showHelp
+{
+cat << DOCSTRING
 Usage: $(basename "$0") WORKINGDIR
 
 '$(basename "$0")' tidies up the HTML files in the directory tree 'WORKINGDIR'
 DOCSTRING
+}
+
+checkForHelp $1
+minNumArgs 1 $#
 
 
 function tidyfile
