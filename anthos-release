@@ -26,28 +26,28 @@ if [ ! -d "$1" ]; then
 fi
 
 mkdir -p "$releaseDir"
-exitOnError 1 "Could not create release directory '$releaseDir'"
+exitOnError "Could not create release directory '$releaseDir'"
 
 [ -n "$releaseDir" ] && rm -rf "$releaseDir"/*
-exitOnError 1 "Could not delete the contents of '$releaseDir'"
+exitOnError "Could not delete the contents of '$releaseDir'"
 
 cp -r "$buildDir"/* "$releaseDir"
-exitOnError 1 "Could not copy from '$buildDir' to '$releaseDir'"
+exitOnError "Could not copy from '$buildDir' to '$releaseDir'"
 
 rm "$releaseDir"/html/searchindex.js
-exitOnError 1 "Could not remove '$releaseDir/searchindex.js'"
+exitOnError "Could not remove '$releaseDir/searchindex.js'"
 
 rm "$releaseDir"/html/objects.inv
-exitOnError 1 "Could not remove '$releaseDir/objects.inv'"
+exitOnError "Could not remove '$releaseDir/objects.inv'"
 
 rm -rf "$releaseDir"/html/_sources
-exitOnError 1 "Could not remove '$releaseDir/_sources'"
+exitOnError "Could not remove '$releaseDir/_sources'"
 
 rm -rf "$releaseDir"/doctrees
-exitOnError 1 "Could not remove '$releaseDir/doctrees'"
+exitOnError "Could not remove '$releaseDir/doctrees'"
 
 #echo "$buildDir"/tidy.txt
 #anthos-tidy-html "$releaseDir" > "$buildDir"/tidy.txt 2>&1
-#exitOnError 1 "'anthos-tidy-html $releaseDir' returned an error."
+#exitOnError "'anthos-tidy-html $releaseDir' returned an error."
 
 echo "Release successful: '$releaseDir'"

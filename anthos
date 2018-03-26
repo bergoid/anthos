@@ -22,10 +22,8 @@ checkForHelp $1
 ################################################################################
 function autoPages
 {
-    echo autoPages
-
     # Create an 'index.rst' file in every folder that
-    # doesn't have one yet.
+    # doesn't yet have one.
     while read folder; do
         title="$(basename "$folder")"
         echo $title > $folder/index.rst
@@ -42,8 +40,6 @@ function autoPages
 ################################################################################
 function updateTags
 {
-    echo updatePages
-
     local sourceDir=source
     local pagesFile=tagged-pages.txt
     local tagsFile=tags.txt
@@ -132,8 +128,6 @@ function updateTags
 ################################################################################
 function autoTocTree
 {
-    echo autoTocTree
-
     local sourceDir=source
     local sitemapFile="source/sitemap/index.rst"
 
@@ -145,8 +139,6 @@ function autoTocTree
 
         local fullScriptPath="$(pwd)"
         local pagesFile="pages.txt"
-
-        echo Current dir : $(pwd)
 
         # Find all index.rst files and store their paths in 'pages.txt':
         find source/ -name 'index.rst' -printf '%h\n' > $pagesFile
@@ -177,7 +169,7 @@ function autoTocTree
     #
     # create a toctree for that folder one level deep
     else
-        pushd "$1"
+        pushd "$1" > /dev/null
         local createTOCTree=true
 
         # check if :mantoctree: is set in the header.inc file
@@ -206,7 +198,7 @@ function autoTocTree
             echo .. include:: toctree.inc >> index.rst
         fi
 
-        popd
+        popd > /dev/null
     fi
 }
 
@@ -218,8 +210,6 @@ function autoTocTree
 ################################################################################
 function updateMetadata
 {
-    echo  updateMetadata
-
     local sourceDir=source
 
     # Ensure presence of 'header.inc' for every page
@@ -372,12 +362,14 @@ function makeSitemap
 ################################################################################
 function buildHtml
 {
+    echo -n Preprocessing reST source ...
     autoPages
     updateTags
     autoTocTree
     updateMetadata
     updateIndex
     makeSitemap
+    echo done.
 
     local sourceDir=${1:-$PWD}
     local buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"

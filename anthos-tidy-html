@@ -35,6 +35,6 @@ if [ ! -d "$1" ]; then
 fi
 
 #cd "$1"
-#exitOnError 1 "Could not 'cd' into '$1'"
+#exitOnError "Could not 'cd' into '$1'"
 
 walkdir "$1" tidyfile \*.html
