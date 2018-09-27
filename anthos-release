@@ -2,52 +2,84 @@
 
 . rabot-utils
 if [ "$?" -ne "0" ]; then
-  echo "$0: Error while sourcing rabot-utils" >&2
-  exit 1
+    echo "$0: Error while sourcing rabot-utils" >&2
+    exit 1
 fi
 
 function showHelp
 {
 cat << DOCSTRING
-Usage: $(basename "$0") BUILDDIR RELEASEDIR
+Usage: $(basename "$0") ROOT_DIR [LOCALCOPY_DIR] [local]
 
-'$(basename "$0")' builds a release directory of an anthos project.
+'$(basename "$0")' builds the anthos source code found in the 'source' subdirectory
+of ROOT_DIR and (re-)creates a 'docs' subdirectory (adjacent to 'source') with the output files. Intermediate files are written in a '~/build' directory tree.
+
+When LOCALCOPY_DIR is specified, then the contents of the latter directory will
+be updated with the contents of 'docs'.
+
+Unless the optional argument 'local' is specified, the script goes on to commit
+and push all changes to the remote git repository.
+
+See also: 'anthos'
 DOCSTRING
 }
 
+# TODO : upgrade this script to an anthos script (anthos-release ?)
+
+# anthos-release ROOT_DIR [LOCALCOPY_DIR] [local]
+
 checkForHelp $1
-minNumArgs 2 $#
 
-buildDir="$1"
-releaseDir="$2"
+require anthos
 
-if [ ! -d "$1" ]; then
-    exitWith 1 "Error: the build dir '$1' doesn't exist"
+localCopy="/media/sf_mshare/notes/"
+
+# cd into script's parent dir
+cd $(dirname $(readlink -f $0))
+exitOnError "cd into parent dir"
+
+# Construct path to build dir
+buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
+exitOnError "buildDir"
+
+# Remove existing build dir
+rm -rf $buildDir
+exitOnError "rm -rf $buildDir"
+
+# Remove previous release files
+rm -rf docs/*
+exitOnError "clean docs"
+
+# Build site
+anthos source
+exitOnError "build site"
+
+# Copy release files into release dir
+cp -r $buildDir/html/* docs/
+exitOnError "copy release files"
+
+# Delete previous local copy
+rm -rf /media/sf_mshare/notes/*
+exitOnError "clean local copy"
+
+# Update local copy
+cp -r docs/* "$localCopy"
+exitOnError "copy release files to local copy"
+
+echo "Local copy updated at: $localCopy"
+
+# Exit here if "local" is specified
+if [ "$1" = "local" ]; then
+    echo TEST
+    exit
 fi
 
-mkdir -p "$releaseDir"
-exitOnError "Could not create release directory '$releaseDir'"
+# commit
+gtcommit -A "$(fullts)"
+exitOnError "gtcommit"
 
-[ -n "$releaseDir" ] && rm -rf "$releaseDir"/*
-exitOnError "Could not delete the contents of '$releaseDir'"
+# push
+git push
+exitOnError "git push"
 
-cp -r "$buildDir"/* "$releaseDir"
-exitOnError "Could not copy from '$buildDir' to '$releaseDir'"
-
-rm "$releaseDir"/html/searchindex.js
-exitOnError "Could not remove '$releaseDir/searchindex.js'"
-
-rm "$releaseDir"/html/objects.inv
-exitOnError "Could not remove '$releaseDir/objects.inv'"
-
-rm -rf "$releaseDir"/html/_sources
-exitOnError "Could not remove '$releaseDir/_sources'"
-
-rm -rf "$releaseDir"/doctrees
-exitOnError "Could not remove '$releaseDir/doctrees'"
-
-#echo "$buildDir"/tidy.txt
-#anthos-tidy-html "$releaseDir" > "$buildDir"/tidy.txt 2>&1
-#exitOnError "'anthos-tidy-html $releaseDir' returned an error."
-
-echo "Release successful: '$releaseDir'"
+echo "Remote copy updated"

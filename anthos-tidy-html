@@ -18,6 +18,7 @@ DOCSTRING
 checkForHelp $1
 minNumArgs 1 $#
 
+require tidy
 
 function tidyfile
 {
