@@ -372,8 +372,16 @@ function buildHtml
     echo done.
 
     local sourceDir=${1:-$PWD}
+
     local buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
+
+    if [ -d "$buildDir" ]; then
+        rm -rf "$buildDir/*"
+        exitOnError "rm -rf $buildDir/*"
+    fi
+
     mkdir -p "$buildDir"
+
     sphinx-build -b html -d $buildDir/doctrees "$sourceDir/source" "$buildDir/html"
 }
 

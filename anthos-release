@@ -1,5 +1,4 @@
-#!/bin/bash
-
+#!/bin/bash 
 . rabot-utils
 if [ "$?" -ne "0" ]; then
     echo "$0: Error while sourcing rabot-utils" >&2
@@ -9,42 +8,60 @@ fi
 function showHelp
 {
 cat << DOCSTRING
-Usage: $(basename "$0") ROOT_DIR [LOCALCOPY_DIR] [local]
+Usage: $(basename "$0") ROOT_DIR LOCALCOPY_DIR [local]
 
 '$(basename "$0")' builds the anthos source code found in the 'source' subdirectory
-of ROOT_DIR and (re-)creates a 'docs' subdirectory (adjacent to 'source') with the output files. Intermediate files are written in a '~/build' directory tree.
+of ROOT_DIR and (re-)creates a 'docs' subdirectory (adjacent to 'source') containing
+the output files. Intermediate files are written in a '~/build' directory tree.
 
-When LOCALCOPY_DIR is specified, then the contents of the latter directory will
-be updated with the contents of 'docs'.
+If LOCALCOPY_DIR doesn't exist, it will be created.
 
-Unless the optional argument 'local' is specified, the script goes on to commit
-and push all changes to the remote git repository.
+After the build, the contents of LOCALCOPY_DIR will be updated with the contents of 'docs'.
+
+Unless the optional argument 'local' is specified, and if ROOT_DIR is under git version
+control, the script goes on to commit all changes. If a remote repository is configured,
+a 'push' to the remote repo will be performed.
 
 See also: 'anthos'
 DOCSTRING
 }
 
-# TODO : upgrade this script to an anthos script (anthos-release ?)
-
-# anthos-release ROOT_DIR [LOCALCOPY_DIR] [local]
-
 checkForHelp $1
+minNumArgs 2 $#
 
 require anthos
 
-localCopy="/media/sf_mshare/notes/"
+if [ $# = 2]; then
+    require git
+fi
 
-# cd into script's parent dir
-cd $(dirname $(readlink -f $0))
-exitOnError "cd into parent dir"
+# rootDir
+if [ ! -d "$1" ]; then
+    exitOnError "ROOT_DIR doesn't exist: $1"
+fi
 
-# Construct path to build dir
-buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
-exitOnError "buildDir"
+rootDir="$(readlink -f "$1")"
+exitOnError "Invalid ROOT_DIR: $1"
 
-# Remove existing build dir
-rm -rf $buildDir
-exitOnError "rm -rf $buildDir"
+# localCopy
+localCopy="$(trimTrailingSlashes "$2")"
+exitOnError "trimTrailingSlashes '$2'"
+
+if [ ! -d "$localCopy" ]; then
+    mkdir -p "$localCopy"
+    exitOnError "Could not create LOCALCOPY_DIR: $localCopy"
+fi
+
+localCopy="$(readlink -f "$localCopy")"
+exitOnError "Invalid LOCALCOPY_DIR: $2"
+
+# cd into ROOT_DIR
+cd $rootDir
+exitOnError "cd $rootDir"
+
+# Create docs directory if it doesn't exist
+mkdir -p docs
+exitOnError "mkdir -p docs"
 
 # Remove previous release files
 rm -rf docs/*
@@ -55,11 +72,12 @@ anthos source
 exitOnError "build site"
 
 # Copy release files into release dir
+buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
 cp -r $buildDir/html/* docs/
 exitOnError "copy release files"
 
 # Delete previous local copy
-rm -rf /media/sf_mshare/notes/*
+rm -rf "$localCopy/*"
 exitOnError "clean local copy"
 
 # Update local copy
@@ -69,14 +87,23 @@ exitOnError "copy release files to local copy"
 echo "Local copy updated at: $localCopy"
 
 # Exit here if "local" is specified
-if [ "$1" = "local" ]; then
-    echo TEST
+if [ "$3" = "local" ]; then
     exit
+fi
+
+# Check if in git version control
+if ! (git rev-parse --is-inside-work-tree 1>/dev/null 2>&1); then
+    exitWith 1 "'$rootDir' is not in git version control. Skipping 'commit' & 'push'."
 fi
 
 # commit
 gtcommit -A "$(fullts)"
 exitOnError "gtcommit"
+
+# Check if there is a remote repo configured
+if ! (git ls-remote 1>/dev/null 2>&1); then
+    exitWith 1 "'$rootDir' doesn't have a remote repo configured. Skipping 'push'."
+fi
 
 # push
 git push
