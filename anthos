@@ -22,6 +22,8 @@ checkForHelp $1
 ################################################################################
 function autoPages
 {
+    local title=
+
     # Create an 'index.rst' file in every folder that
     # doesn't yet have one.
     while read folder; do
@@ -46,6 +48,8 @@ function updateTags
     local tagsDir=$sourceDir/tags
     local tsvSingleTag=data.tsv
     local tsvAllTags=source/tags/data.tsv
+    local tagname_fs=
+    local tagdir=
 
     # Create a file listing all pages having tags, one page per line. Example:
     # path_to_page: tag1<tab>tag2
@@ -92,7 +96,7 @@ function updateTags
         echo >> "$tagdir/index.rst"
 
         # Iterate over all pages having tag '$tagname' and add a row for every page in tsvdata.txt
-        tsvFile="$tagdir/$tsvSingleTag"
+        local tsvFile="$tagdir/$tsvSingleTag"
 
         echo -n > "$tsvFile"
         while read page; do
@@ -235,26 +239,29 @@ function updateMetadata
     # Locate ':browse:' statements and ensure presence of ':browse_root:' for every page in subtree
     ###############################################################################################
 
+        local browseRootDir=
+        local headerFile=
+
         # for every browsable tree found, determine browse_root
         while read browseRootDir; do
 
-            browse_root="$(echo $browseRootDir | sed "s/^source\///g")"
+            local browse_root="$(echo $browseRootDir | sed "s/^source\///g")"
 
             # for every header.inc found in the tree:
             while read headerFile; do
 
                 # Check if ':browse_root:' statement already present
-                grepOutput="$(grep -n "^\:browse_root\:" "$headerFile")"
+                local grepOutput="$(grep -n "^\:browse_root\:" "$headerFile")"
 
                 # if present: check if value of :browse_root: is still correct
                 if [ "$?" -eq "0" ]; then
                     # obtain current value
-                    browse_root_current="$(echo $grepOutput | cut -d: -f 4- | sed "s/^[ ]*//")"
+                    local browse_root_current="$(echo $grepOutput | cut -d: -f 4- | sed "s/^[ ]*//")"
 
                     # if correct: leave file unchanged
                     # if not correct : obtain line number, and update statement
                     if [ "$browse_root" != "$browse_root_current" ]; then
-                        browse_root_lineno="$(echo "$grepOutput" | cut -d: -f 1)"
+                        local browse_root_lineno="$(echo "$grepOutput" | cut -d: -f 1)"
                         sed -i "${browse_root_lineno} c :browse_root: $browse_root" $headerFile
                     fi
 
@@ -279,6 +286,10 @@ function updateIndex
 {
     local tsvFile=source/pageindex/tsvdata.txt
     local pagesFile=tagged-pages.txt
+    local line=
+    local firstTag=
+    local tagname=
+    local tagname_fs=
 
     while read line; do
         grep ":notimestamp:" "source${line}header.inc" > /dev/null 2>&1
@@ -339,6 +350,7 @@ function makeSitemap
 
     # iterate over the entries found in the toctree of the current dir
     # and call this script for every entry found.
+    local line=
     while read line; do
         local nextDir="$currentDir$line"
         local numWords="$(tr / ' ' <<<"$nextDir" | wc -w)"
