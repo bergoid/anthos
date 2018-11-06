@@ -388,8 +388,7 @@ function buildHtml
     local buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
 
     if [ -d "$buildDir" ]; then
-        rm -rf "$buildDir/*"
-        exitOnError "rm -rf $buildDir/*"
+        try rm -rf "$buildDir/*"
     fi
 
     mkdir -p "$buildDir"

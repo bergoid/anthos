@@ -44,8 +44,7 @@ rootDir="$(readlink -f "$1")"
 exitOnError "Invalid ROOT_DIR: $1"
 
 # localCopy
-localCopy="$(trimTrailingSlashes "$2")"
-exitOnError "trimTrailingSlashes '$2'"
+localCopy="$(try trimTrailingSlashes "$2")"
 
 if [ ! -d "$localCopy" ]; then
     mkdir -p "$localCopy"
@@ -56,33 +55,26 @@ localCopy="$(readlink -f "$localCopy")"
 exitOnError "Invalid LOCALCOPY_DIR: $2"
 
 # cd into ROOT_DIR
-cd $rootDir
-exitOnError "cd $rootDir"
+try cd $rootDir
 
 # Create docs directory if it doesn't exist
-mkdir -p docs
-exitOnError "mkdir -p docs"
+try mkdir -p docs
 
 # Remove previous release files
-rm -rf docs/*
-exitOnError "clean docs"
+try rm -rf docs/*
 
 # Build site
-anthos source
-exitOnError "build site"
+try anthos source
 
 # Copy release files into release dir
 buildDir="$HOME/build/$(stripBaseDir $PWD $HOME)"
-cp -r $buildDir/html/* docs/
-exitOnError "copy release files"
+try cp -r $buildDir/html/* docs/
 
 # Delete previous local copy
-rm -rf "$localCopy/*"
-exitOnError "clean local copy"
+try rm -rf "$localCopy/*"
 
 # Update local copy
-cp -r docs/* "$localCopy"
-exitOnError "copy release files to local copy"
+try cp -r docs/* "$localCopy"
 
 echo "Local copy updated at: $localCopy"
 
@@ -106,7 +98,6 @@ if ! (git ls-remote 1>/dev/null 2>&1); then
 fi
 
 # push
-git push
-exitOnError "git push"
+try git push
 
 echo "Remote copy updated"
