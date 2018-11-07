@@ -44,7 +44,7 @@ rootDir="$(readlink -f "$1")"
 exitOnError "Invalid ROOT_DIR: $1"
 
 # localCopy
-localCopy="$(try trimTrailingSlashes "$2")"
+localCopy="$(trimTrailingSlashes "$2")"
 
 if [ ! -d "$localCopy" ]; then
     mkdir -p "$localCopy"
